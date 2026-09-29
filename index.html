@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Say It">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f2f4f3">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Say It</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one big control per screen, bottom tab bar like a trail GPS; everything thumb-sized for an iPad on a table or lap. */
+:root {
+  --bg: #f2f4f3;
+  --surface: #ffffff;
+  --ink: #17221f;
+  --muted: #5b6b66;
+  --line: #d5ddda;
+  --accent: #1f6f5c;       /* sage-teal: the "go" colour */
+  --accent-ink: #ffffff;
+  --signal: #c2561a;       /* rust: listening / recording */
+  --soft: #e3ece8;
+  --warn-bg: #fff4dc;
+  --warn-ink: #6b4a00;
+  --font: "Atkinson Hyperlegible", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --r: 18px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121816; --surface: #1b2320; --ink: #eef3f1; --muted: #9fb0aa; --line: #2e3a36;
+    --accent: #4fb89b; --accent-ink: #0c1a16; --signal: #f08a4b; --soft: #22302b;
+    --warn-bg: #3a2f14; --warn-ink: #ffd98a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121816; --surface: #1b2320; --ink: #eef3f1; --muted: #9fb0aa; --line: #2e3a36;
+  --accent: #4fb89b; --accent-ink: #0c1a16; --signal: #f08a4b; --soft: #22302b;
+  --warn-bg: #3a2f14; --warn-ink: #ffd98a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font);
+  font-size: 20px; line-height: 1.4; -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+}
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.app { display: flex; flex-direction: column; height: 100%; padding-top: env(safe-area-inset-top, 0px); }
+main { flex: 1; overflow-y: auto; padding-inline: 20px; padding-block: 20px 28px; }
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1, h2 { margin: 0; text-wrap: balance; line-height: 1.15; }
+h1 { font-size: 30px; }
+h2 { font-size: 24px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 17px; }
+
+/* Tabs */
+nav.tabs {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-inline: 10px; padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+nav.tabs button {
+  border: 0; background: none; border-radius: 14px; padding-block: 10px; min-height: 64px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 17px; color: var(--muted);
+}
+nav.tabs button svg { width: 28px; height: 28px; }
+nav.tabs button[aria-current="page"] { background: var(--soft); color: var(--ink); font-weight: 700; }
+
+/* Talk */
+.talk { align-items: center; text-align: center; }
+.mic {
+  width: min(62vw, 260px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; border: 0;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; align-content: center; gap: 6px;
+  font-size: 26px; font-weight: 700; position: relative; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform .15s ease;
+}
+.mic svg { width: 76px; height: 76px; }
+.mic:active { transform: scale(.97); }
+.mic.listening { background: var(--signal); box-shadow: 0 0 0 calc(var(--lvl, 0) * 40px + 8px) color-mix(in srgb, var(--signal) 25%, transparent); }
+.mic.busy { opacity: .7; }
+.hint { font-size: 20px; color: var(--muted); min-height: 1.4em; }
+
+.result {
+  width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 22px; display: flex; flex-direction: column; gap: 16px; text-align: left;
+}
+.result .said { font-size: clamp(30px, 6vw, 44px); font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  border: 2px solid var(--line); background: var(--surface); border-radius: 14px;
+  min-height: 60px; padding-inline: 20px; font-size: 20px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+}
+.btn svg { width: 24px; height: 24px; flex: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger { color: var(--signal); }
+.btn.block { width: 100%; }
+.choices { display: grid; gap: 10px; }
+.choices .btn { justify-content: flex-start; text-align: left; font-weight: 400; font-size: 22px; padding-block: 12px; }
+.label { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.typebox { width: 100%; display: flex; flex-direction: column; gap: 12px; text-align: left; }
+textarea, input[type=text] {
+  width: 100%; border: 2px solid var(--line); border-radius: 14px; background: var(--surface);
+  padding: 14px 16px; font-size: 24px; min-height: 60px;
+}
+textarea { min-height: 110px; resize: vertical; }
+
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 14px; padding: 16px 18px; text-align: left; width: 100%; }
+
+/* Phrase board */
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.board button {
+  min-height: 96px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface);
+  font-size: 23px; font-weight: 700; padding: 14px 16px; text-align: left; line-height: 1.2; overflow-wrap: anywhere;
+}
+.board button:active { background: var(--soft); }
+
+/* Setup */
+.plist { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.pitem { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 18px; border-top: 1px solid var(--line); min-height: 72px; }
+.pitem:first-child { border-top: 0; }
+.pitem .t { flex: 1; min-width: 0; font-size: 21px; overflow-wrap: anywhere; }
+.chip { font-size: 15px; font-weight: 700; border-radius: 999px; padding: 4px 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip.ok { background: var(--soft); color: var(--accent); }
+.chip.todo { background: var(--warn-bg); color: var(--warn-ink); }
+.pitem .btn { min-height: 52px; padding-inline: 14px; font-size: 18px; }
+.addrow { display: flex; gap: 10px; }
+.addrow input { flex: 1; min-width: 0; }
+
+.teach { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 24px; display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center; }
+.teach .target { font-size: clamp(30px, 6vw, 46px); font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.dots { display: flex; gap: 12px; }
+.dots span { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); }
+.dots span.on { background: var(--accent); }
+
+.settings { display: grid; gap: 14px; }
+.field { display: grid; gap: 6px; }
+.field label { font-weight: 700; }
+select, input[type=range] { width: 100%; min-height: 52px; }
+select { border: 2px solid var(--line); border-radius: 14px; background: var(--surface); padding-inline: 12px; font-size: 20px; }
+details { border-top: 1px solid var(--line); padding-top: 16px; }
+summary { font-weight: 700; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+
+.confirm { background: var(--warn-bg); color: var(--warn-ink); border-radius: 14px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.confirm p { flex: 1 1 200px; }
+
+@media (max-width: 560px) {
+  .pitem { flex-wrap: wrap; }
+  .pitem .t { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <main id="main">
+    <!-- TALK -->
+    <section id="view-talk" class="wrap talk" aria-label="Talk">
+      <div id="talkEmpty" class="notice" hidden>
+        <p><strong>No phrases taught yet.</strong> Open <strong>Setup</strong> and record each phrase three times. Then come back here and tap the button to talk.</p>
+      </div>
+      <button id="micBtn" class="mic" aria-label="Tap to talk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+        <span id="micLabel">Tap to talk</span>
+      </button>
+      <p id="talkHint" class="hint">Tap, say one of your phrases, then wait.</p>
+
+      <div id="resultCard" class="result" hidden aria-live="polite">
+        <div>
+          <p class="label" id="resultLabel">You said</p>
+          <p class="said" id="resultText"></p>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="sayAgain">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
+            Say it again
+          </button>
+        </div>
+        <div id="altWrap">
+          <p class="label" id="altLabel">Not right? Tap the one you meant</p>
+          <div class="choices" id="altList"></div>
+        </div>
+      </div>
+
+      <div class="typebox">
+        <label class="label" for="typeText">Or type it</label>
+        <textarea id="typeText" placeholder="Type anything, then tap Speak"></textarea>
+        <button class="btn primary block" id="typeSpeak">Speak</button>
+      </div>
+    </section>
+
+    <!-- PHRASES -->
+    <section id="view-board" class="wrap" aria-label="Phrases" hidden>
+      <div>
+        <h1>Phrases</h1>
+        <p class="muted small">Tap one to say it out loud.</p>
+      </div>
+      <div class="board" id="board"></div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="view-setup" class="wrap" aria-label="Setup" hidden>
+      <div id="teachPanel" class="teach" hidden>
+        <p class="label">Say this phrase</p>
+        <p class="target" id="teachTarget"></p>
+        <div class="dots" id="teachDots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <button id="teachMic" class="mic" aria-label="Tap and say it">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+          <span id="teachMicLabel">Tap and say it</span>
+        </button>
+        <p class="hint" id="teachHint">Say it the way you normally would.</p>
+        <div class="row">
+          <button class="btn" id="teachNext">Next phrase</button>
+          <button class="btn" id="teachDone">Done</button>
+        </div>
+      </div>
+
+      <div id="setupMain" class="wrap" style="gap:22px">
+        <div>
+          <h1>Setup</h1>
+          <p class="muted small">Each phrase needs three recordings before the talk button can recognise it. The more he records, the better it gets.</p>
+        </div>
+        <button class="btn primary block" id="teachAll">Record phrases that need it</button>
+        <div class="plist" id="plist"></div>
+        <div class="addrow">
+          <input type="text" id="newPhrase" placeholder="Add a phrase" aria-label="New phrase" autocomplete="off">
+          <button class="btn primary" id="addPhrase">Add</button>
+        </div>
+        <div id="confirmBox" class="confirm" hidden>
+          <p id="confirmText"></p>
+          <button class="btn danger" id="confirmYes">Delete</button>
+          <button class="btn" id="confirmNo">Keep</button>
+        </div>
+
+        <details>
+          <summary>Voice and backup</summary>
+          <div class="settings" style="margin-top:12px">
+            <div class="field">
+              <label for="voiceSel">Speaking voice</label>
+              <select id="voiceSel"></select>
+            </div>
+            <div class="field">
+              <label for="rate">Speaking speed</label>
+              <input type="range" id="rate" min="0.6" max="1.2" step="0.05">
+            </div>
+            <div class="field">
+              <label for="autoSpeak">When unsure</label>
+              <select id="autoSpeak">
+                <option value="ask">Ask which phrase he meant</option>
+                <option value="speak">Say the best guess anyway</option>
+              </select>
+            </div>
+            <div class="row">
+              <button class="btn" id="exportBtn">Save a backup</button>
+              <label class="btn" for="importFile">Restore a backup</label>
+              <input type="file" id="importFile" accept="application/json,.json" hidden>
+            </div>
+            <p class="muted small" id="backupMsg"></p>
+            <p class="muted small">Recordings are turned into number patterns and kept only on this iPad. No sound is saved or sent anywhere.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Sections">
+    <button data-view="talk" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+      Talk
+    </button>
+    <button data-view="board">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Phrases
+    </button>
+    <button data-view="setup">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      Setup
+    </button>
+  </nav>
+</div>
+
+<script>
+// Speech matching for a small, fixed list of phrases.
+// Turns audio into MFCC feature frames, then compares a new utterance against
+// recorded examples with dynamic time warping (DTW). Runs fully on-device.
+(function (root) {
+  'use strict';
+
+  var TARGET_SR = 16000;
+  var FRAME_MS = 25, HOP_MS = 10;
+  var N_MELS = 26, N_CEPS = 13;
+
+  function resample(samples, fromSr, toSr) {
+    if (fromSr === toSr) return Float32Array.from(samples);
+    var ratio = fromSr / toSr;
+    var n = Math.floor(samples.length / ratio);
+    var out = new Float32Array(n);
+    // Simple box-filter anti-aliasing followed by linear interpolation.
+    var win = Math.max(1, Math.round(ratio));
+    for (var i = 0; i < n; i++) {
+      var pos = i * ratio, i0 = Math.floor(pos), acc = 0, cnt = 0;
+      for (var k = 0; k < win && i0 + k < samples.length; k++) { acc += samples[i0 + k]; cnt++; }
+      out[i] = cnt ? acc / cnt : 0;
+    }
+    return out;
+  }
+
+  // Keep the loud part of the recording, with a little padding.
+  function trimSilence(x, sr) {
+    var hop = Math.round(sr * 0.01), frames = [];
+    for (var i = 0; i + hop <= x.length; i += hop) {
+      var e = 0;
+      for (var j = i; j < i + hop; j++) e += x[j] * x[j];
+      frames.push(Math.sqrt(e / hop));
+    }
+    if (!frames.length) return x;
+    var sorted = frames.slice().sort(function (a, b) { return a - b; });
+    var noise = sorted[Math.floor(sorted.length * 0.1)];
+    var peak = sorted[sorted.length - 1];
+    var thr = Math.max(noise * 3, peak * 0.08, 1e-4);
+    var first = -1, last = -1;
+    for (var f = 0; f < frames.length; f++) if (frames[f] > thr) { if (first < 0) first = f; last = f; }
+    if (first < 0) return new Float32Array(0);
+    var pad = 10; // 100 ms
+    var s = Math.max(0, (first - pad) * hop), e2 = Math.min(x.length, (last + 1 + pad) * hop);
+    return x.subarray ? x.subarray(s, e2) : x.slice(s, e2);
+  }
+
+  function peakLevel(x) {
+    var m = 0;
+    for (var i = 0; i < x.length; i++) { var a = Math.abs(x[i]); if (a > m) m = a; }
+    return m;
+  }
+
+  function fft(re, im) {
+    var n = re.length, i, j, k;
+    for (i = 1, j = 0; i < n; i++) {
+      var bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { var t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (var len = 2; len <= n; len <<= 1) {
+      var ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (i = 0; i < n; i += len) {
+        var cr = 1, ci = 0;
+        for (k = 0; k < len / 2; k++) {
+          var a = i + k, b = a + len / 2;
+          var xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - xr; im[b] = im[a] - xi;
+          re[a] += xr; im[a] += xi;
+          var ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+        }
+      }
+    }
+  }
+
+  var melCache = {};
+  function melBank(nfft, sr) {
+    var key = nfft + ':' + sr;
+    if (melCache[key]) return melCache[key];
+    function hz2mel(h) { return 2595 * Math.log10(1 + h / 700); }
+    function mel2hz(m) { return 700 * (Math.pow(10, m / 2595) - 1); }
+    var lo = hz2mel(60), hi = hz2mel(sr / 2 * 0.95), pts = [];
+    for (var i = 0; i < N_MELS + 2; i++) pts.push(Math.floor((nfft + 1) * mel2hz(lo + (hi - lo) * i / (N_MELS + 1)) / sr));
+    var bank = [];
+    for (var m = 1; m <= N_MELS; m++) {
+      var f = new Float32Array(nfft / 2 + 1);
+      for (var k = pts[m - 1]; k < pts[m]; k++) f[k] = (k - pts[m - 1]) / Math.max(1, pts[m] - pts[m - 1]);
+      for (k = pts[m]; k < pts[m + 1]; k++) f[k] = (pts[m + 1] - k) / Math.max(1, pts[m + 1] - pts[m]);
+      bank.push(f);
+    }
+    return (melCache[key] = bank);
+  }
+
+  // Returns an array of feature vectors (MFCC 1..12 plus deltas), mean-normalised.
+  function features(samples, sr) {
+    var x = resample(samples, sr, TARGET_SR);
+    x = trimSilence(x, TARGET_SR);
+    var fl = Math.round(TARGET_SR * FRAME_MS / 1000), hop = Math.round(TARGET_SR * HOP_MS / 1000);
+    if (x.length < fl * 3) return [];
+    var nfft = 1; while (nfft < fl) nfft <<= 1;
+    var bank = melBank(nfft, TARGET_SR), ham = new Float32Array(fl);
+    for (var i = 0; i < fl; i++) ham[i] = 0.54 - 0.46 * Math.cos(2 * Math.PI * i / (fl - 1));
+    var ceps = [];
+    for (var s = 0; s + fl <= x.length; s += hop) {
+      var re = new Float64Array(nfft), im = new Float64Array(nfft);
+      for (i = 0; i < fl; i++) {
+        var prev = s + i > 0 ? x[s + i - 1] : 0;
+        re[i] = (x[s + i] - 0.97 * prev) * ham[i];
+      }
+      fft(re, im);
+      var pow = new Float64Array(nfft / 2 + 1);
+      for (i = 0; i <= nfft / 2; i++) pow[i] = re[i] * re[i] + im[i] * im[i];
+      var logm = new Float64Array(N_MELS);
+      for (var m = 0; m < N_MELS; m++) {
+        var e = 0, f = bank[m];
+        for (i = 0; i < f.length; i++) if (f[i]) e += f[i] * pow[i];
+        logm[m] = Math.log(e + 1e-10);
+      }
+      var c = new Float32Array(N_CEPS - 1);
+      for (var q = 1; q < N_CEPS; q++) {
+        var acc = 0;
+        for (m = 0; m < N_MELS; m++) acc += logm[m] * Math.cos(Math.PI * q * (m + 0.5) / N_MELS);
+        c[q - 1] = acc;
+      }
+      ceps.push(c);
+    }
+    var d = N_CEPS - 1, T = ceps.length, mean = new Float32Array(d), sd = new Float32Array(d);
+    for (var t = 0; t < T; t++) for (i = 0; i < d; i++) mean[i] += ceps[t][i] / T;
+    for (t = 0; t < T; t++) for (i = 0; i < d; i++) { var z = ceps[t][i] - mean[i]; sd[i] += z * z / T; }
+    for (i = 0; i < d; i++) sd[i] = Math.sqrt(sd[i]) + 1e-6;
+    var out = [];
+    for (t = 0; t < T; t++) {
+      var v = new Array(d * 2);
+      for (i = 0; i < d; i++) {
+        v[i] = (ceps[t][i] - mean[i]) / sd[i];
+        var a = ceps[Math.min(T - 1, t + 2)][i], b = ceps[Math.max(0, t - 2)][i];
+        v[d + i] = 0.5 * (a - b) / sd[i];
+      }
+      out.push(v);
+    }
+    // Halve the frame rate to keep DTW fast on older iPads.
+    var slim = [];
+    for (t = 0; t < out.length; t += 2) slim.push(out[t].map(function (n) { return Math.round(n * 1000) / 1000; }));
+    return slim;
+  }
+
+  function dist(a, b) {
+    var s = 0;
+    for (var i = 0; i < a.length; i++) { var z = a[i] - b[i]; s += z * z; }
+    return Math.sqrt(s);
+  }
+
+  // Length-normalised DTW distance with a slope band.
+  function dtw(a, b) {
+    var n = a.length, m = b.length;
+    if (!n || !m) return Infinity;
+    if (n > 2.5 * m || m > 2.5 * n) return Infinity;
+    var band = Math.max(Math.abs(n - m) + 5, Math.round(Math.max(n, m) * 0.3));
+    var INF = Infinity, prev = new Float64Array(m + 1).fill(INF), cur = new Float64Array(m + 1);
+    prev[0] = 0;
+    for (var i = 1; i <= n; i++) {
+      cur.fill(INF);
+      var center = Math.round(i * m / n);
+      var lo = Math.max(1, center - band), hi = Math.min(m, center + band);
+      for (var j = lo; j <= hi; j++) {
+        var c = dist(a[i - 1], b[j - 1]);
+        cur[j] = c + Math.min(prev[j], cur[j - 1], prev[j - 1]);
+      }
+      var t = prev; prev = cur; cur = t;
+    }
+    return prev[m] / (n + m);
+  }
+
+  // phrases: [{id, text, samples: [features, ...]}]
+  // Returns phrases ranked best-first with a score in [0,1] for the best match.
+  function rank(feat, phrases) {
+    var scored = [];
+    phrases.forEach(function (p) {
+      var ds = (p.samples || []).map(function (s) { return dtw(feat, s); }).sort(function (x, y) { return x - y; });
+      if (!ds.length) return;
+      // Average of the two closest examples is steadier than the single best.
+      var d = ds.length > 1 ? (ds[0] * 0.6 + ds[1] * 0.4) : ds[0];
+      scored.push({ id: p.id, text: p.text, dist: d });
+    });
+    scored.sort(function (x, y) { return x.dist - y.dist; });
+    if (scored.length) {
+      var best = scored[0].dist, second = scored.length > 1 ? scored[1].dist : best * 1.5;
+      scored[0].confidence = isFinite(best) ? Math.max(0, Math.min(1, (second - best) / (best * 0.25))) : 0;
+    }
+    return scored;
+  }
+
+  var api = { features: features, dtw: dtw, rank: rank, trimSilence: trimSilence, peakLevel: peakLevel, TARGET_SR: TARGET_SR };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.SpeechMatch = api;
+})(this);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  var SM = window.SpeechMatch;
+  var NEEDED = 3, MAX_SAMPLES = 8;
+
+  var STARTER = [
+    'Yes', 'No', 'Thank you', 'Please say that again', 'I need help',
+    'Please be patient, I had surgery on my tongue', 'Can you write it down?',
+    "I'd like a coffee, please", 'Where is the bathroom?', 'How much is it?',
+    'Call Michael', "I'm hungry", "I'm tired", 'Good morning', 'See you later'
+  ];
+
+  var state = {
+    phrases: STARTER.map(function (t, i) { return { id: 'p' + i + '_' + Date.now().toString(36), text: t, samples: [] }; }),
+    settings: { voice: '', rate: 0.9, whenUnsure: 'ask' }
+  };
+
+  // ---------- storage (IndexedDB, with a memory fallback) ----------
+  var dbp = null;
+  function idb() {
+    if (dbp) return dbp;
+    dbp = new Promise(function (res, rej) {
+      try {
+        var r = indexedDB.open('say-it', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+      } catch (e) { rej(e); }
+    });
+    return dbp;
+  }
+  function load() {
+    return idb().then(function (db) {
+      return new Promise(function (res) {
+        var q = db.transaction('kv').objectStore('kv').get('state');
+        q.onsuccess = function () { res(q.result || null); };
+        q.onerror = function () { res(null); };
+      });
+    }).catch(function () { return null; });
+  }
+  var saveTimer = null;
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      idb().then(function (db) {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(JSON.parse(JSON.stringify(state)), 'state');
+      }).catch(function () {});
+    }, 150);
+  }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+
+  // ---------- speech out ----------
+  var synth = window.speechSynthesis;
+  var voices = [];
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().filter(function (v) { return /^en/i.test(v.lang); });
+    var sel = $('voiceSel');
+    sel.innerHTML = '';
+    var def = document.createElement('option'); def.value = ''; def.textContent = 'Default voice'; sel.appendChild(def);
+    voices.forEach(function (v) {
+      var o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; sel.appendChild(o);
+    });
+    sel.value = state.settings.voice || '';
+  }
+  function speak(text) {
+    if (!synth || !text) return;
+    synth.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.rate = state.settings.rate || 0.9;
+    var v = voices.find(function (x) { return x.voiceURI === state.settings.voice; });
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+    synth.speak(u);
+  }
+  var primed = false;
+  function primeSpeech() {
+    // iOS only lets a page speak after a tap has started speech once.
+    if (primed || !synth) return; primed = true;
+    var u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u);
+  }
+
+  // ---------- microphone ----------
+  var mic = { ctx: null, stream: null, src: null, proc: null, idleTimer: null };
+  function openMic() {
+    if (mic.stream && mic.stream.active) { clearTimeout(mic.idleTimer); return Promise.resolve(); }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('nomic'));
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!mic.ctx) mic.ctx = new AC();
+    var resumed = mic.ctx.resume ? mic.ctx.resume() : Promise.resolve();
+    return Promise.all([resumed, navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })])
+      .then(function (r) { mic.stream = r[1]; mic.src = mic.ctx.createMediaStreamSource(mic.stream); });
+  }
+  function closeMicSoon() {
+    clearTimeout(mic.idleTimer);
+    mic.idleTimer = setTimeout(function () {
+      if (mic.stream) mic.stream.getTracks().forEach(function (t) { t.stop(); });
+      mic.stream = null;
+    }, 45000);
+  }
+
+  // Records one utterance. Stops after a pause once speech is heard, or when stop() is called.
+  function recordOnce(onLevel) {
+    var chunks = [], sr = mic.ctx.sampleRate, heard = false, quietFor = 0, total = 0;
+    var noise = [], thr = 0.012, done = false, resolveFn;
+    var proc = mic.ctx.createScriptProcessor(2048, 1, 1);
+    var sink = mic.ctx.createGain(); sink.gain.value = 0;
+    mic.src.connect(proc); proc.connect(sink); sink.connect(mic.ctx.destination);
+    var p = new Promise(function (res) { resolveFn = res; });
+    function finish(reason) {
+      if (done) return; done = true;
+      try { mic.src.disconnect(proc); proc.disconnect(); sink.disconnect(); } catch (e) {}
+      var len = chunks.reduce(function (a, c) { return a + c.length; }, 0), all = new Float32Array(len), o = 0;
+      chunks.forEach(function (c) { all.set(c, o); o += c.length; });
+      resolveFn({ samples: all, sr: sr, heard: heard, reason: reason });
+    }
+    proc.onaudioprocess = function (e) {
+      if (done) return;
+      var d = e.inputBuffer.getChannelData(0), c = new Float32Array(d), s = 0;
+      for (var i = 0; i < c.length; i++) s += c[i] * c[i];
+      var rms = Math.sqrt(s / c.length), dur = c.length / sr;
+      chunks.push(c); total += dur;
+      if (total < 0.35) { noise.push(rms); thr = Math.max(0.012, 3 * noise.reduce(function (a, b) { return a + b; }, 0) / noise.length); }
+      else if (rms > thr) { heard = true; quietFor = 0; }
+      else if (heard) quietFor += dur;
+      if (onLevel) onLevel(Math.min(1, rms / (thr * 6)));
+      if (heard && quietFor > 1.3) finish('pause');
+      else if (!heard && total > 7) finish('silence');
+      else if (total > 12) finish('max');
+    };
+    return { done: p, stop: function () { finish('tap'); } };
+  }
+
+  function micError(err, hintEl) {
+    var msg = 'The microphone is not available.';
+    if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError'))
+      msg = 'Microphone access is off. In Settings, tap Safari, then Microphone, and choose Allow. Then reload this page.';
+    else if (err && err.message === 'nomic')
+      msg = 'This browser cannot use the microphone. Open this page in Safari.';
+    hintEl.textContent = msg;
+  }
+
+  // ---------- helpers ----------
+  function $(id) { return document.getElementById(id); }
+  function trained() { return state.phrases.filter(function (p) { return p.samples.length >= NEEDED; }); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  // ---------- tabs ----------
+  var views = { talk: $('view-talk'), board: $('view-board'), setup: $('view-setup') };
+  function show(name) {
+    Object.keys(views).forEach(function (k) { views[k].hidden = k !== name; });
+    document.querySelectorAll('nav.tabs button').forEach(function (b) {
+      if (b.dataset.view === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    if (name === 'talk') renderTalk();
+    if (name === 'board') renderBoard();
+    if (name === 'setup') { stopTeach(); renderSetup(); }
+    $('main').scrollTop = 0;
+  }
+  document.querySelectorAll('nav.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { cancelActive(); show(b.dataset.view); });
+  });
+
+  var active = null; // current recording
+  function cancelActive() { if (active) { var a = active; active = null; a.rec.stop(); a.cancelled = true; } }
+
+  // ---------- talk ----------
+  var lastFeat = null, lastRanked = [];
+  function renderTalk() {
+    var t = trained();
+    $('talkEmpty').hidden = t.length > 0;
+    $('micBtn').disabled = t.length === 0;
+    $('micBtn').classList.toggle('busy', t.length === 0);
+  }
+  function setMic(btn, label, mode) {
+    btn.classList.toggle('listening', mode === 'listening');
+    btn.style.setProperty('--lvl', 0);
+    btn.querySelector('span').textContent = label;
+  }
+
+  $('micBtn').addEventListener('click', function () {
+    primeSpeech();
+    var btn = $('micBtn'), hint = $('talkHint');
+    if (active) { active.rec.stop(); return; }
+    if (synth) synth.cancel();
+    openMic().then(function () {
+      var rec = recordOnce(function (l) { btn.style.setProperty('--lvl', l.toFixed(2)); });
+      var job = active = { rec: rec };
+      setMic(btn, 'Listening… tap when done', 'listening');
+      hint.textContent = 'Say your phrase now.';
+      rec.done.then(function (r) {
+        active = null; setMic(btn, 'Tap to talk'); closeMicSoon();
+        if (job.cancelled) return;
+        if (!r.heard) { hint.textContent = "I didn't hear anything. Tap and try again, a little closer."; return; }
+        var feat = SM.features(r.samples, r.sr);
+        if (feat.length < 5) { hint.textContent = 'That was too short. Tap and try again.'; return; }
+        lastFeat = feat;
+        lastRanked = SM.rank(feat, trained());
+        showResult();
+      });
+    }).catch(function (e) { micError(e, hint); });
+  });
+
+  function showResult() {
+    var best = lastRanked[0], card = $('resultCard');
+    if (!best) return;
+    var sure = best.confidence >= 0.35 || state.settings.whenUnsure === 'speak';
+    card.hidden = false;
+    var alts = sure ? lastRanked.slice(1, 4) : lastRanked.slice(0, 4);
+    if (sure) {
+      $('resultLabel').textContent = 'You said';
+      $('resultText').textContent = best.text;
+      $('sayAgain').hidden = false;
+      $('altLabel').textContent = 'Not right? Tap the one you meant';
+      speak(best.text);
+      $('talkHint').textContent = 'Tap to say another.';
+    } else {
+      $('resultLabel').textContent = 'Which one did you mean?';
+      $('resultText').textContent = '';
+      $('sayAgain').hidden = true;
+      $('altLabel').textContent = 'Tap it and I will say it';
+      $('talkHint').textContent = "I'm not sure. Pick below, or tap to try again.";
+    }
+    var list = $('altList'); list.innerHTML = '';
+    alts.forEach(function (a) {
+      var b = el('button', 'btn', a.text);
+      b.addEventListener('click', function () { chooseCorrection(a.id); });
+      list.appendChild(b);
+    });
+    $('altWrap').hidden = alts.length === 0;
+  }
+
+  // He picked a different phrase: say it, and learn from this recording.
+  function chooseCorrection(id) {
+    var p = state.phrases.find(function (x) { return x.id === id; });
+    if (!p) return;
+    speak(p.text);
+    if (lastFeat) {
+      p.samples.push(lastFeat);
+      if (p.samples.length > MAX_SAMPLES) p.samples.splice(NEEDED, 1); // keep the first recordings, drop the oldest extra
+      lastFeat = null; save();
+    }
+    $('resultLabel').textContent = 'You said';
+    $('resultText').textContent = p.text;
+    $('sayAgain').hidden = false;
+    $('altWrap').hidden = true;
+    $('talkHint').textContent = 'Got it. I will remember that one.';
+  }
+
+  $('sayAgain').addEventListener('click', function () { speak($('resultText').textContent); });
+  $('typeSpeak').addEventListener('click', function () { primeSpeech(); speak($('typeText').value.trim()); });
+
+  // ---------- board ----------
+  function renderBoard() {
+    var b = $('board'); b.innerHTML = '';
+    state.phrases.forEach(function (p) {
+      var btn = el('button', null, p.text);
+      btn.addEventListener('click', function () { primeSpeech(); speak(p.text); });
+      b.appendChild(btn);
+    });
+    if (!state.phrases.length) b.appendChild(el('p', 'muted', 'No phrases yet. Add some in Setup.'));
+  }
+
+  // ---------- setup ----------
+  var pendingDelete = null;
+  function renderSetup() {
+    var list = $('plist'); list.innerHTML = '';
+    state.phrases.forEach(function (p) {
+      var row = el('div', 'pitem');
+      row.appendChild(el('span', 't', p.text));
+      var n = p.samples.length;
+      row.appendChild(el('span', 'chip ' + (n >= NEEDED ? 'ok' : 'todo'), n >= NEEDED ? 'Ready · ' + n : n + ' of ' + NEEDED));
+      var rec = el('button', 'btn', 'Record');
+      rec.setAttribute('aria-label', 'Record ' + p.text);
+      rec.addEventListener('click', function () { startTeach([p.id]); });
+      var del = el('button', 'btn danger', 'Delete');
+      del.setAttribute('aria-label', 'Delete ' + p.text);
+      del.addEventListener('click', function () { askDelete(p); });
+      row.appendChild(rec); row.appendChild(del);
+      list.appendChild(row);
+    });
+    var need = state.phrases.filter(function (p) { return p.samples.length < NEEDED; }).length;
+    $('teachAll').textContent = need ? 'Record the ' + need + ' phrase' + (need > 1 ? 's' : '') + ' that need it' : 'All phrases are ready';
+    $('teachAll').disabled = !need;
+    $('confirmBox').hidden = !pendingDelete;
+    $('voiceSel').value = state.settings.voice || '';
+    $('rate').value = state.settings.rate;
+    $('autoSpeak').value = state.settings.whenUnsure;
+  }
+  function askDelete(p) {
+    pendingDelete = p;
+    $('confirmText').textContent = 'Delete "' + p.text + '" and its recordings?';
+    $('confirmBox').hidden = false;
+    $('confirmBox').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  $('confirmYes').addEventListener('click', function () {
+    if (pendingDelete) state.phrases = state.phrases.filter(function (x) { return x !== pendingDelete; });
+    pendingDelete = null; save(); renderSetup();
+  });
+  $('confirmNo').addEventListener('click', function () { pendingDelete = null; renderSetup(); });
+
+  function addPhrase() {
+    var v = $('newPhrase').value.trim();
+    if (!v) return;
+    state.phrases.push({ id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, samples: [] });
+    $('newPhrase').value = ''; save(); renderSetup();
+  }
+  $('addPhrase').addEventListener('click', addPhrase);
+  $('newPhrase').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addPhrase(); } });
+
+  // Teaching flow: walks through a queue of phrases, three recordings each.
+  var teach = null;
+  function startTeach(ids) {
+    teach = { queue: ids.slice(), idx: 0, got: 0 };
+    $('setupMain').hidden = true; $('teachPanel').hidden = false;
+    showTeach();
+    $('main').scrollTop = 0;
+  }
+  function stopTeach() {
+    cancelActive();
+    teach = null;
+    $('setupMain').hidden = false; $('teachPanel').hidden = true;
+  }
+  function currentTeach() { return teach && state.phrases.find(function (p) { return p.id === teach.queue[teach.idx]; }); }
+  function showTeach() {
+    var p = currentTeach();
+    if (!p) { stopTeach(); renderSetup(); return; }
+    $('teachTarget').textContent = p.text;
+    var target = Math.max(NEEDED, teach.got ? NEEDED : 0);
+    var dots = $('teachDots').children;
+    for (var i = 0; i < dots.length; i++) dots[i].classList.toggle('on', i < teach.got);
+    var last = teach.idx >= teach.queue.length - 1;
+    $('teachHint').textContent = teach.got >= target ? (last ? 'All done. Tap Done, or record it once more.' : 'Done with this one. Tap Next phrase, or record it once more.') : 'Recording ' + (teach.got + 1) + ' of ' + NEEDED + '. Say it the way you normally would.';
+    $('teachNext').hidden = teach.idx >= teach.queue.length - 1;
+    setMic($('teachMic'), 'Tap and say it');
+  }
+  $('teachMic').addEventListener('click', function () {
+    var btn = $('teachMic'), hint = $('teachHint'), p = currentTeach();
+    if (!p) return;
+    if (active) { active.rec.stop(); return; }
+    openMic().then(function () {
+      var rec = recordOnce(function (l) { btn.style.setProperty('--lvl', l.toFixed(2)); });
+      var job = active = { rec: rec };
+      setMic(btn, 'Listening… tap when done', 'listening');
+      hint.textContent = 'Say: ' + p.text;
+      rec.done.then(function (r) {
+        active = null; setMic(btn, 'Tap and say it'); closeMicSoon();
+        if (job.cancelled || !teach) return;
+        if (!r.heard) { hint.textContent = "I didn't hear anything. Tap and try again."; return; }
+        var feat = SM.features(r.samples, r.sr);
+        if (feat.length < 5) { hint.textContent = 'That was too short. Tap and try again.'; return; }
+        p.samples.push(feat);
+        if (p.samples.length > MAX_SAMPLES) p.samples.splice(NEEDED, 1);
+        teach.got++; save();
+        if (teach.got >= NEEDED && teach.idx < teach.queue.length - 1) {
+          teach.idx++; teach.got = 0;
+          hint.textContent = 'Great. Next phrase.';
+          setTimeout(showTeach, 700);
+        } else showTeach();
+      });
+    }).catch(function (e) { micError(e, hint); });
+  });
+  $('teachNext').addEventListener('click', function () { cancelActive(); if (!teach) return; teach.idx++; teach.got = 0; showTeach(); });
+  $('teachDone').addEventListener('click', function () { stopTeach(); renderSetup(); });
+  $('teachAll').addEventListener('click', function () {
+    var ids = state.phrases.filter(function (p) { return p.samples.length < NEEDED; }).map(function (p) { return p.id; });
+    if (ids.length) startTeach(ids);
+  });
+
+  // ---------- settings ----------
+  $('voiceSel').addEventListener('change', function () { state.settings.voice = this.value; save(); primeSpeech(); speak('This is my voice.'); });
+  $('rate').addEventListener('change', function () { state.settings.rate = parseFloat(this.value); save(); primeSpeech(); speak('This is how fast I talk.'); });
+  $('autoSpeak').addEventListener('change', function () { state.settings.whenUnsure = this.value; save(); });
+
+  $('exportBtn').addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify({ app: 'say-it', version: 1, saved: new Date().toISOString(), state: state })], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'say-it-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    $('backupMsg').textContent = 'Backup file saved. Keep it somewhere safe, like iCloud Drive.';
+  });
+  $('importFile').addEventListener('change', function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    f.text().then(function (txt) {
+      var data = JSON.parse(txt);
+      if (!data || data.app !== 'say-it' || !data.state || !Array.isArray(data.state.phrases)) throw new Error('bad');
+      state = data.state; save(); renderSetup(); loadVoices();
+      $('backupMsg').textContent = 'Backup restored: ' + state.phrases.length + ' phrases.';
+    }).catch(function () { $('backupMsg').textContent = 'That file is not a Say It backup.'; });
+    this.value = '';
+  });
+
+  // ---------- start ----------
+  if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+  load().then(function (saved) {
+    if (saved && Array.isArray(saved.phrases)) {
+      state = saved;
+      state.settings = Object.assign({ voice: '', rate: 0.9, whenUnsure: 'ask' }, state.settings || {});
+    }
+    loadVoices(); renderTalk();
+    if (!trained().length) show('setup');
+  });
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+  window.__sayIt = { get state() { return state; } }; // for testing
+})();
+</script>
+</body>
+</html>
