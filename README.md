@@ -1,6 +1,6 @@
 # Say It: Craig's phrase translator
 
-A web app for Craig's iPad. He records his everyday phrases three times each; afterwards he taps the big button, says a phrase, and the iPad says it back clearly. Matching runs on the iPad (MFCC features + dynamic time warping in `src/dsp.js`), works offline once installed, and no audio leaves the device.
+A web app for Craig's iPad. It has a typing box with word suggestions that learn from what he says (plus desert, RV and side-by-side vocabulary), and his recent sentences one tap away. For voice, he records his everyday phrases three times each; afterwards he taps the big button, says a phrase, and the iPad says it back clearly. Matching runs on the iPad (MFCC features + dynamic time warping in `src/dsp.js`), works offline once installed, and no audio leaves the device.
 
 - `src/` source. `sh build.sh` rebuilds the site files at the repo root (index.html, sw.js, manifest, icons), which GitHub Pages serves.
 - Live at https://jmichaelbrooke.github.io/say-it/ once Pages is set to main, / (root). The microphone needs HTTPS.
