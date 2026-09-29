@@ -1,5 +1,5 @@
 // Keeps the app working with no signal: serve from cache, refresh in the background.
-var CACHE = 'say-it-v1';
+var CACHE = 'say-it-v2';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
